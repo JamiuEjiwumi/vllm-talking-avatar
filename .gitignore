@@ -15,7 +15,7 @@ node_modules/
 
 # Large model and voice files
 models/
-voices/
+# voices/
 
 # Terraform state
 terraform.tfstate
