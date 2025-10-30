@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+env/
+venv/
+
+# Node.js
+node_modules/
+
+# Large model and voice files
+models/
+voices/
+
+# Terraform state
+terraform.tfstate
+*.tfstate.backup
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env

@@ -1,0 +1,16 @@
+services:
+  vllm-app:
+    build: .
+    container_name: vllm-app-1
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    environment:
+      PIPER_BIN: /usr/local/bin/piper
+      PIPER_VOICE: /opt/piper/voices/en_US-amy-medium.onnx
+      WAV2LIP_CHECKPOINT: /models/wav2lip/wav2lip_gan.pth
+    volumes:
+      - ./app:/app/app
+      - ./models:/models
+      - ./voices:/opt/piper/voices
+    restart: unless-stopped

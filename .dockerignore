@@ -1,0 +1,47 @@
+# .venv
+# .git
+# __pycache__/
+# *.pyc
+# models/
+# voices/
+# node_modules/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Node.js artifacts
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Models and voices (already mounted via volumes)
+models/
+voices/
+
+# Environment and config
+.env
+*.env
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
