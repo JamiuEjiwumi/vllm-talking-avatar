@@ -14,12 +14,13 @@ venv/
 node_modules/
 
 # Large model and voice files
-models/wav2lip/wav2lip_gan.pth
-# voices/
+models/
+voices/
 
 # Terraform state
 terraform.tfstate
 *.tfstate.backup
+*.tfvars
 
 # OS/editor files
 .DS_Store
