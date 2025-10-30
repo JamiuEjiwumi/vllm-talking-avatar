@@ -14,7 +14,7 @@ venv/
 node_modules/
 
 # Large model and voice files
-models/
+models/wav2lip/wav2lip_gan.pth
 # voices/
 
 # Terraform state
