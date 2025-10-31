@@ -2,6 +2,8 @@ import os, subprocess
 from .base import VideoProvider
 
 class Wav2LipProvider(VideoProvider):
+    capabilities = {"lip_sync"}  # <— add this
+
     def __init__(self, checkpoint_path: str | None = None):
         self.checkpoint = checkpoint_path or os.getenv("WAV2LIP_CHECKPOINT", "/models/wav2lip/wav2lip_gan.pth")
         self.repo_dir = "/app/Wav2Lip"
@@ -34,7 +36,6 @@ class Wav2LipProvider(VideoProvider):
             "--face_det_batch_size","1",
             "--wav2lip_batch_size","16",
             "--pads","0","10","0","10",
-            # "--nosmooth",
         ]
         subprocess.run(cmd, cwd=self.repo_dir, env=env, check=True)
         return out_mp4_path

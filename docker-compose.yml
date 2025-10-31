@@ -6,11 +6,21 @@ services:
     ports:
       - "8501:8501"
     environment:
+      # Core app config
       PIPER_BIN: /usr/local/bin/piper
       PIPER_VOICE: /opt/piper/voices/en_US-amy-medium.onnx
       WAV2LIP_CHECKPOINT: /models/wav2lip/wav2lip_gan.pth
+      PYTHONHTTPSVERIFY: "0"
+      # INFINITALK_API_KEY: "your_infinitetalk_key_here"
+      # INFINITALK_BASE: "https://api.infinitetalk.net"
+      FAL_API_KEY: "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3214e2"
+      # IMAGEIO_FFMPEG_EXE: /usr/bin/ffmpeg
+      # FAL_KEY: "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3214e2"
+      # FAL_VEO_ENDPOINT: "fal-ai/veo3"
+      FAL_INF_ENDPOINT: "fal-ai/infinitalk/single-text"
     volumes:
       - ./app:/app/app
       - ./models:/models
       - ./voices:/opt/piper/voices
+      - ./outputs:/app/outputs
     restart: unless-stopped
