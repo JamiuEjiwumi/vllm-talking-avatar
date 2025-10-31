@@ -17,6 +17,7 @@ services:
       # IMAGEIO_FFMPEG_EXE: /usr/bin/ffmpeg
       # FAL_KEY: "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3214e2"
       # FAL_VEO_ENDPOINT: "fal-ai/veo3"
+      FAL_VOICE: "Bill"
       FAL_INF_ENDPOINT: "fal-ai/infinitalk/single-text"
     volumes:
       - ./app:/app/app

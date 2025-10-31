@@ -1,3 +1,4 @@
+# app/vllm/core/providers/video/fal_infinitalk_provider.py
 import os
 import io
 import time
@@ -19,6 +20,7 @@ RETRIES      = 3
 BACKOFF      = 3     # seconds
 DL_TIMEOUT   = 300   # final mp4 download
 
+
 def _encode_image_jpeg_data_uri(path: str, max_edge: int = MAX_IMG_SIZE) -> str:
     with Image.open(path) as im:
         im = im.convert("RGB")
@@ -28,6 +30,7 @@ def _encode_image_jpeg_data_uri(path: str, max_edge: int = MAX_IMG_SIZE) -> str:
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
         return f"data:image/jpeg;base64,{b64}"
 
+
 def _pick_video_url(obj: dict) -> Optional[str]:
     if not isinstance(obj, dict):
         return None
@@ -36,13 +39,15 @@ def _pick_video_url(obj: dict) -> Optional[str]:
         return obj["video"]["url"]
     return obj.get("video_url") or obj.get("url")
 
+
 class FalInfinitalkProvider(VideoProvider):
     """
     InfiniteTalk via fal_client.run() on '/single-text' (Fal does TTS).
     Env:
       FAL_KEY / FAL_API_KEY  : id:secret
       FAL_INF_ENDPOINT       : default 'fal-ai/infinitalk/single-text'
-      FAL_TEXT               : text prompt
+      FAL_TEXT               : text prompt (set by SpeakPipeline for single-text)
+      FAL_VOICE              : e.g. 'Bill' (optional; default 'Bill')
     """
     capabilities = {"lip_sync"}
 
@@ -52,6 +57,7 @@ class FalInfinitalkProvider(VideoProvider):
             raise RuntimeError("FAL_KEY (or FAL_API_KEY) is required for fal.ai.")
         os.environ.setdefault("FAL_KEY", key)
 
+        # Favor single-text to keep payloads small (no WAV upload)
         self.endpoint = os.getenv("FAL_INF_ENDPOINT", "fal-ai/infinitalk/single-text")
 
     def generate(
@@ -80,6 +86,8 @@ class FalInfinitalkProvider(VideoProvider):
         if len(words) > 120:
             text = " ".join(words[:120])
 
+        voice = os.getenv("FAL_VOICE", "Bill")  # default voice; override via env
+
         print("[fal_infinitalk] preparing image…", flush=True)
         try:
             img_url = fal_client.upload_file(face_image_path)  # short call to v3.fal.media
@@ -91,9 +99,14 @@ class FalInfinitalkProvider(VideoProvider):
             except Exception:
                 img_url = _encode_image_jpeg_data_uri(face_image_path)
 
+        # Payload tolerant to schema variants:
+        #  - some expect 'text_input', others 'prompt'
+        #  - recent versions require 'voice'
         payload = {
             "image_url": img_url,
             "text_input": text,
+            "prompt": text,
+            "voice": voice,
             "fps": int(fps),
             "size": {"width": int(size), "height": int(size)},
         }
@@ -121,7 +134,13 @@ class FalInfinitalkProvider(VideoProvider):
                 return out_mp4_path
 
             except (FalClientError, requests.RequestException, RuntimeError) as e:
-                last_err = e
+                msg = str(e)
+                # If backend complains about fields, try a minimal alt schema once
+                if attempt == 1 and ("prompt" in msg or "voice" in msg or "field required" in msg.lower()):
+                    print("[fal_infinitalk] schema mismatch — retrying with minimal payload", flush=True)
+                    payload = {"image_url": img_url, "prompt": text, "voice": voice}
+                else:
+                    last_err = e
                 print(f"[fal_infinitalk] attempt {attempt} failed: {e}", flush=True)
                 if attempt < RETRIES:
                     time.sleep(BACKOFF)
