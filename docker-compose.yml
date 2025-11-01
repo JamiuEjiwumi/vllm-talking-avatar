@@ -10,7 +10,6 @@ services:
       PIPER_BIN: /usr/local/bin/piper
       PIPER_VOICE: /opt/piper/voices/en_US-amy-medium.onnx
       WAV2LIP_CHECKPOINT: /models/wav2lip/wav2lip_gan.pth
-      PYTHONHTTPSVERIFY: "0"
       ORT_LOG_SEVERITY_LEVEL: "3"
       FAL_API_KEY: "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3214e2"
       FAL_VOICE: "Bill"
@@ -18,6 +17,29 @@ services:
       FAL_QUEUE_BASE: "https://queue.fal.run"
       D_ID_API_KEY: "ZWppdHVuZGUzQGdtYWlsLmNvbQ:Kg_E2A2C8K7tpZZaq9MDt"
       DID_TEXT: "Hello, this is a test message."
+      DID_VOICE_PROVIDER: "microsoft"
+      DID_VOICE: "en-US-GuyNeural"
+      # --- SadTalker tuning ---
+      SADTALKER_POSE_SCALE: "1.2"          # 1.0–1.6 typical
+      SADTALKER_EXPRESSION_SCALE: "1.3"    # 1.0–1.8 typical
+      SADTALKER_STILL_MODE: "false"
+      SADTALKER_PREPROCESS: "full"         # or "crop"
+      SADTALKER_ENHANCER: "gfpgan"
+      SADTALKER_TIMEOUT: "300"
+      SADTALKER_BASE: "https://jamiu001-sadtalker.hf.space"
+      FAL_VEO3_ENDPOINT: "fal-ai/veo3"
+      FAL_VEO3_AR: "16:9"
+      FAL_VEO3_DURATION: "8s"
+      FAL_VEO3_RES: "720p"
+      FAL_VEO3_AUDIO: "true" 
+      FAL_TIMEOUT: "1800"
+      FAL_REQ_TIMEOUT: "45"
+      FAL_POLL_EVERY: "2.0"
+      FAL_RESPONSE_GRACE: "60"
+      FAL_CONC_BACKOFF_S: "5"
+      FAL_CONC_BACKOFF_MAX: "60"
+      FAL_MAX_SUBMIT_RETRIES: "40"
+
     volumes:
       - ./app:/app/app
       - ./models:/models

@@ -11,23 +11,46 @@ st.set_page_config(page_title="VLLM – Talking Avatar", page_icon="Speech", lay
 
 # === SIDEBAR ===
 st.sidebar.header("Settings")
-tts_choice = st.sidebar.selectbox("TTS Provider", ["piper", "pyttsx3"], index=0)
+
+# Movement preset (helps route to provider)
+movement = st.sidebar.selectbox(
+    "Movement style",
+    ["Subtle (D-ID)", "Strong (SadTalker)", "Mouth-only (Wav2Lip)"],
+    index=0
+)
+if movement.startswith("Subtle"):
+    default_provider = "did"
+elif movement.startswith("Strong"):
+    default_provider = "sadtalker"
+else:
+    default_provider = "wav2lip"
+
+tts_choice = st.sidebar.selectbox("Local TTS Provider", ["piper", "pyttsx3"], index=0)
 video_choice = st.sidebar.selectbox(
     "Video Provider",
     ["wav2lip", "sadtalker", "did", "fal_infinitalk", "veo3", "fal_veo3"],
-    index=1  # default: sadtalker
+    index=["wav2lip", "sadtalker", "did", "fal_infinitalk", "veo3", "fal_veo3"].index(default_provider)
 )
 fps = st.sidebar.number_input("Output FPS", min_value=15, max_value=60, value=25, step=1)
 size = st.sidebar.number_input("Output size (px)", min_value=192, max_value=512, value=512, step=32)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("D-ID Voice & Realism")
+use_ssml = st.sidebar.checkbox("Use SSML prosody (more natural)", value=True)
+did_voice_provider = st.sidebar.selectbox("D-ID voice provider", ["microsoft"], index=0)
+did_voice = st.sidebar.text_input("D-ID voice id", value="en-US-GuyNeural")
+driver_url = st.sidebar.text_input("Driver video URL (optional, public MP4)", value="")
 
 # === MAIN UI ===
 st.title("Speech VLLM – Realistic Talking Avatar")
 st.caption("Upload face → type text → realistic head movement, eye blinks, lip sync")
 
 img_file = st.file_uploader("Upload face image (.jpg/.png)", type=["jpg", "jpeg", "png"])
-text = st.text_area("What should the avatar say?",
-                    "Hello! I'm alive with real head movement and eye blinks.",
-                    height=120)
+text = st.text_area(
+    "What should the avatar say? (plain text or SSML if enabled)",
+    "Hello! I'm alive with real head movement and eye blinks.",
+    height=160
+)
 
 if st.button("Speak", type="primary"):
     # === VALIDATION ===
@@ -50,7 +73,7 @@ if st.button("Speak", type="primary"):
 
     try:
         with st.spinner(f"Generating with **{video_choice}**..."):
-            # Save image (if provided)
+            # Save image if provided
             if img_file:
                 temp_dir = tempfile.mkdtemp(prefix="avatar_", dir="/tmp")
                 face_path = os.path.join(temp_dir, "face.png")
@@ -63,15 +86,24 @@ if st.button("Speak", type="primary"):
             os.close(out_fd)
 
             if video_choice == "did":
-                # D-ID handles speech itself; pass text via env for the provider
+                # Pass text & realism config to D-ID via env
                 os.environ["DID_TEXT"] = text
+                os.environ["DID_USE_SSML"] = "1" if use_ssml else "0"
+                os.environ["DID_VOICE_PROVIDER"] = did_voice_provider
+                os.environ["DID_VOICE"] = did_voice
+                if driver_url.strip():
+                    os.environ["DID_DRIVER_URL"] = driver_url.strip()
+                else:
+                    os.environ.pop("DID_DRIVER_URL", None)
+
                 result_path = video.generate(
                     face_image_path=face_path,
-                    audio_wav_path=None,
+                    audio_wav_path=None,  # not used in D-ID text/SSML mode
                     out_mp4_path=out_path,
                     fps=fps,
                     size=size,
                 )
+
             elif video_choice == "sadtalker":
                 # Local TTS then SadTalker
                 audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
@@ -84,6 +116,7 @@ if st.button("Speak", type="primary"):
                     fps=fps,
                     size=size,
                 )
+
             else:
                 # wav2lip / fal_* / veo3 via your SpeakPipeline
                 audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
