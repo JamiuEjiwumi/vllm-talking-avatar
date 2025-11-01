@@ -80,11 +80,14 @@ if st.button("Speak", type="primary"):
                 with open(face_path, "wb") as f:
                     f.write(img_file.getvalue())
                 os.chmod(face_path, 0o644)
+            else:
+                face_path = None
 
             # Output path
             out_fd, out_path = tempfile.mkstemp(suffix=".mp4", dir="/tmp")
             os.close(out_fd)
 
+            # === CHOOSE PROVIDER & GENERATE ===
             if video_choice == "did":
                 # Pass text & realism config to D-ID via env
                 os.environ["DID_TEXT"] = text
@@ -105,7 +108,7 @@ if st.button("Speak", type="primary"):
                 )
 
             elif video_choice == "sadtalker":
-                # Local TTS then SadTalker
+                # Local TTS → SadTalker (needs a WAV)
                 audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
                 os.close(audio_fd)
                 tts.synthesize(text, audio_path)
@@ -117,8 +120,28 @@ if st.button("Speak", type="primary"):
                     size=size,
                 )
 
+            elif video_choice == "fal_infinitalk":
+                # FAL InfiniTalk: provider handles TTS + talking head itself
+                os.environ["FAL_TEXT"] = text  # provider reads this
+                result_path = video.generate(
+                    face_image_path=face_path,
+                    audio_wav_path=None,
+                    out_mp4_path=out_path,
+                    fps=fps,
+                    size=size,
+                )
+
+            elif video_choice == "fal_veo3":
+                # FAL Veo3: cinematic text→video (not lip-sync)
+                os.environ["FAL_VEO3_PROMPT"] = text  # use the same text box as the prompt
+                result_path = video.generate(
+                    face_image_path=face_path,   # optional init image (if supported)
+                    audio_wav_path=None,
+                    out_mp4_path=out_path,
+                )
+
             else:
-                # wav2lip / fal_* / veo3 via your SpeakPipeline
+                # wav2lip (and any other providers that expect pre-made audio)
                 audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
                 os.close(audio_fd)
                 tts.synthesize(text, audio_path)
@@ -137,8 +160,12 @@ if st.button("Speak", type="primary"):
 
         st.success("Video ready!")
         st.video(video_bytes)
-        st.download_button("Download MP4", data=video_bytes,
-                           file_name=f"avatar_{video_choice}.mp4", mime="video/mp4")
+        st.download_button(
+            "Download MP4",
+            data=video_bytes,
+            file_name=f"avatar_{video_choice}.mp4",
+            mime="video/mp4"
+        )
         if audio_path and os.path.exists(audio_path):
             st.audio(audio_path)
 
@@ -146,7 +173,7 @@ if st.button("Speak", type="primary"):
         st.error("Generation failed:")
         st.exception(e)
     finally:
-        # Cleanup
+        # Cleanup temp files
         for path in [audio_path, out_path]:
             if path and os.path.exists(path):
                 try:
