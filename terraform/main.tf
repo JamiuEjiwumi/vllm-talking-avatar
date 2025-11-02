@@ -1,15 +1,21 @@
+########################################
+# Locals
+########################################
 locals {
-  rg_name      = "${var.project}-rg"
-  acr_name     = replace("${var.project}acr", "-", "")
-  aks_name     = "${var.project}-aks"
-  sa_name      = substr(replace("${var.project}sa", "-", ""), 0, 22)
-  ns           = "vllm"
-  models_share = "models"
-  voices_share = "voices"
-  full_image   = "${azurerm_container_registry.acr.login_server}/${var.image_name}:${var.image_tag}"
+  rg_name  = "${var.project}-rg"
+  acr_name = replace("${var.project}acr", "-", "")
+  sa_name  = substr(replace("${var.project}sa", "-", ""), 0, 22)
+
+  models_share  = "models"
+  voices_share  = "voices"
+  outputs_share = "outputs"
+
+  image_full = "${azurerm_container_registry.acr.login_server}/${var.image_name}:${var.image_tag}"
 }
 
-# ---------------- Resource Group ----------------
+########################################
+# Resource Group
+########################################
 resource "azurerm_resource_group" "rg" {
   name     = local.rg_name
   location = var.location
@@ -19,120 +25,17 @@ resource "azurerm_resource_group" "rg" {
   }
 }
 
-# ---------------- ACR ----------------
+########################################
+# ACR
+########################################
 resource "azurerm_container_registry" "acr" {
   name                = local.acr_name
-  resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
   sku                 = "Basic"
   admin_enabled       = true
 }
 
-# ---------------- Storage (Azure Files) ----------------
-resource "azurerm_storage_account" "sa" {
-  name                     = local.sa_name
-  resource_group_name      = azurerm_resource_group.rg.name
-  location                 = azurerm_resource_group.rg.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-}
-
-resource "azurerm_storage_share" "models" {
-  name                 = local.models_share
-  storage_account_name = azurerm_storage_account.sa.name
-  quota                = 200 # Adjust for larger models if needed
-}
-
-resource "azurerm_storage_share" "voices" {
-  name                 = local.voices_share
-  storage_account_name = azurerm_storage_account.sa.name
-  quota                = 20 # Adjust for larger voice files if needed
-}
-
-# ---------------- AKS (CPU system + GPU user pool) ----------------
-resource "azurerm_kubernetes_cluster" "aks" {
-  name                = local.aks_name
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  dns_prefix          = "${var.project}-dns"
-  sku_tier            = "Standard"
-  oidc_issuer_enabled = true
-  workload_identity_enabled = true
-
-  default_node_pool {
-    name       = "sys"
-    vm_size    = "Standard_D2s_v3" # Changed to v3 to avoid quota issue; revert to v5 after quota increase
-    node_count = 1
-    type       = "VirtualMachineScaleSets"
-    os_sku     = "Ubuntu"
-  }
-
-  identity {
-    type = "SystemAssigned"
-  }
-}
-
-# Allow AKS kubelet to pull from ACR
-resource "azurerm_role_assignment" "acr_pull" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
-}
-
-# GPU pool
-resource "azurerm_kubernetes_cluster_node_pool" "gpu" {
-  name                  = "gpu"
-  kubernetes_cluster_id = azurerm_kubernetes_cluster.aks.id
-  vm_size               = "Standard_NC6s_v3" # 1x V100 16GB
-  node_count            = 1
-  mode                  = "User"
-  os_sku                = "Ubuntu"
-  orchestrator_version  = azurerm_kubernetes_cluster.aks.kubernetes_version
-  node_taints           = ["sku=gpu:NoSchedule"]
-}
-
-# --------------- Kube provider ---------------
-data "azurerm_kubernetes_cluster" "aks" {
-  name                = azurerm_kubernetes_cluster.aks.name
-  resource_group_name = azurerm_resource_group.rg.name
-}
-
-provider "kubernetes" {
-  host                   = data.azurerm_kubernetes_cluster.aks.kube_config[0].host
-  client_certificate     = base64decode(data.azurerm_kubernetes_cluster.aks.kube_config[0].client_certificate)
-  client_key             = base64decode(data.azurerm_kubernetes_cluster.aks.kube_config[0].client_key)
-  cluster_ca_certificate = base64decode(data.azurerm_kubernetes_cluster.aks.kube_config[0].cluster_ca_certificate)
-}
-
-# --------------- K8s Namespace ---------------
-
-resource "time_sleep" "wait_for_aks" {
-  depends_on      = [azurerm_kubernetes_cluster.aks]
-  create_duration = "60s"
-}
-
-resource "kubernetes_namespace" "ns" {
-  metadata {
-    name = local.ns
-  }
-  depends_on = [time_sleep.wait_for_aks]
-}
-
-# Secret for Azure Files
-resource "kubernetes_secret" "azurefile" {
-  metadata {
-    name      = "azure-file-secret"
-    namespace = kubernetes_namespace.ns.metadata[0].name
-  }
-  data = {
-    azurestorageaccountname = azurerm_storage_account.sa.name
-    azurestorageaccountkey  = azurerm_storage_account.sa.primary_access_key
-  }
-  type       = "Opaque"
-  depends_on = [kubernetes_namespace.ns]
-}
-
-# ---------------- Build & Push image to ACR ----------------
 resource "null_resource" "acr_build" {
   triggers = {
     image_tag       = var.image_tag
@@ -145,8 +48,8 @@ resource "null_resource" "acr_build" {
   provisioner "local-exec" {
     working_dir = var.app_src_path
     command     = <<EOT
-      az acr login -n ${azurerm_container_registry.acr.name} || { echo "ACR login failed"; exit 1; }
-      az acr build -r ${azurerm_container_registry.acr.name} -t ${local.full_image} . || { echo "ACR build failed"; exit 1; }
+      az acr login -n ${azurerm_container_registry.acr.name} || exit 1
+      az acr build -r ${azurerm_container_registry.acr.name} -t ${var.image_name}:${var.image_tag} . || exit 1
     EOT
     interpreter = ["/bin/bash", "-c"]
   }
@@ -154,166 +57,316 @@ resource "null_resource" "acr_build" {
   depends_on = [azurerm_container_registry.acr]
 }
 
-# Wait for ACR to index the image
-resource "time_sleep" "post_build_pause" {
-  depends_on      = [null_resource.acr_build]
+resource "time_sleep" "after_build" {
   create_duration = "30s"
+  depends_on      = [null_resource.acr_build]
 }
 
-# ---------------- Deployment (GPU) ----------------
-resource "kubernetes_deployment" "app" {
-  metadata {
-    name      = "vllm"
-    namespace = kubernetes_namespace.ns.metadata[0].name
-    labels    = { app = "vllm" }
-  }
-  depends_on = [
-    time_sleep.post_build_pause,
-    azurerm_kubernetes_cluster_node_pool.gpu,
-    azurerm_role_assignment.acr_pull,
-    kubernetes_namespace.ns
-  ]
+########################################
+# Storage (Azure Files)
+########################################
+resource "azurerm_storage_account" "sa" {
+  count                    = var.use_azure_files ? 1 : 0
+  name                     = local.sa_name
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
 
-  spec {
-    replicas = 1
-    selector {
-      match_labels = { app = "vllm" }
+resource "azurerm_storage_share" "models" {
+  count                = var.use_azure_files ? 1 : 0
+  name                 = local.models_share
+  storage_account_name = azurerm_storage_account.sa[0].name
+  quota                = 200
+}
+
+resource "azurerm_storage_share" "voices" {
+  count                = var.use_azure_files ? 1 : 0
+  name                 = local.voices_share
+  storage_account_name = azurerm_storage_account.sa[0].name
+  quota                = 20
+}
+
+resource "azurerm_storage_share" "outputs" {
+  count                = var.use_azure_files ? 1 : 0
+  name                 = local.outputs_share
+  storage_account_name = azurerm_storage_account.sa[0].name
+  quota                = 50
+}
+
+########################################
+# Log Analytics (ACA env requirement)
+########################################
+resource "azurerm_log_analytics_workspace" "law" {
+  name                = "${var.project}-law"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+########################################
+# Container Apps Environment
+########################################
+resource "azurerm_container_app_environment" "env" {
+  name                       = "${var.project}-cae"
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.law.id
+}
+
+# Register Azure Files with the environment
+resource "azurerm_container_app_environment_storage" "models" {
+  count                        = var.use_azure_files ? 1 : 0
+  name                         = "models"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  account_name                 = azurerm_storage_account.sa[0].name
+  share_name                   = azurerm_storage_share.models[0].name
+  access_mode                  = "ReadWrite"
+  access_key                   = azurerm_storage_account.sa[0].primary_access_key
+}
+
+resource "azurerm_container_app_environment_storage" "voices" {
+  count                        = var.use_azure_files ? 1 : 0
+  name                         = "voices"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  account_name                 = azurerm_storage_account.sa[0].name
+  share_name                   = azurerm_storage_share.voices[0].name
+  access_mode                  = "ReadWrite"
+  access_key                   = azurerm_storage_account.sa[0].primary_access_key
+}
+
+resource "azurerm_container_app_environment_storage" "outputs" {
+  count                        = var.use_azure_files ? 1 : 0
+  name                         = "outputs"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  account_name                 = azurerm_storage_account.sa[0].name
+  share_name                   = azurerm_storage_share.outputs[0].name
+  access_mode                  = "ReadWrite"
+  access_key                   = azurerm_storage_account.sa[0].primary_access_key
+}
+
+########################################
+# Container App
+########################################
+resource "azurerm_container_app" "app" {
+  name                         = "${var.project}-aca"
+  resource_group_name          = azurerm_resource_group.rg.name
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  revision_mode                = "Single"
+
+  registry {
+    server               = azurerm_container_registry.acr.login_server
+    username             = azurerm_container_registry.acr.admin_username
+    password_secret_name = "acr-pwd"
+  }
+
+  secret {
+    name  = "acr-pwd"
+    value = azurerm_container_registry.acr.admin_password
+  }
+
+  secret {
+    name  = "fal-api-key"
+    value = var.fal_api_key
+  }
+
+  secret {
+    name  = "did-api-key"
+    value = var.d_id_api_key
+  }
+
+  dynamic "secret" {
+    for_each = try(var.sadtalker_base, null) != null && var.sadtalker_base != "" ? [1] : []
+    content {
+      name  = "sadtalker-base"
+      value = var.sadtalker_base
     }
-    template {
-      metadata {
-        labels = { app = "vllm" }
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = var.app_port
+    transport        = "auto"
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    container {
+      name   = "web"
+      image  = local.image_full
+      cpu    = 1.0
+      memory = "2Gi"
+
+      # --- ENV (ALL MULTI-LINE) ---
+
+      # Port
+      env {
+        name  = "PORT"
+        value = tostring(var.app_port)
       }
-      spec {
-        toleration {
-          key      = "sku"
-          operator = "Equal"
-          value    = "gpu"
-          effect   = "NoSchedule"
-        }
-        node_selector = { "kubernetes.azure.com/agentpool" = "gpu" }
 
-        container {
-          name  = "vllm"
-          image = local.full_image
-          port {
-            container_port = var.container_port
-          }
-          resources {
-            limits = {
-              "nvidia.com/gpu" = tostring(var.gpu_count)
-              cpu              = tostring(var.cpu)
-              memory           = "${var.memory_gb}Gi"
-            }
-            requests = {
-              "nvidia.com/gpu" = tostring(var.gpu_count)
-              cpu              = tostring(var.cpu * 0.8) # Slightly lower for testing
-              memory           = "${var.memory_gb * 0.8}Gi"
-            }
-          }
-          env {
-            name  = "PIPER_BIN"
-            value = var.env_vars["PIPER_BIN"]
-          }
-          env {
-            name  = "PIPER_VOICE"
-            value = var.env_vars["PIPER_VOICE"]
-          }
-          env {
-            name  = "WAV2LIP_CHECKPOINT"
-            value = var.env_vars["WAV2LIP_CHECKPOINT"]
-          }
-          # Removed INFINITETALK_CHECKPOINT as per your request
-          volume_mount {
-            name       = "models"
-            mount_path = "/mnt/models"
-          }
-          volume_mount {
-            name       = "voices"
-            mount_path = "/mnt/voices"
-          }
-          liveness_probe {
-            http_get {
-              path = "/health" # Adjust based on your app's health endpoint
-              port = var.container_port
-            }
-            initial_delay_seconds = 30
-            period_seconds        = 10
-          }
-          readiness_probe {
-            http_get {
-              path = "/health" # Adjust based on your app's health endpoint
-              port = var.container_port
-            }
-            initial_delay_seconds = 5
-            period_seconds        = 5
-          }
+      # Streamlit/general env (non-secrets)
+      env {
+        name  = "STREAMLIT_SERVER_HEADLESS"
+        value = lookup(var.app_env, "STREAMLIT_SERVER_HEADLESS", "true")
+      }
+      env {
+        name  = "STREAMLIT_SERVER_ADDRESS"
+        value = lookup(var.app_env, "STREAMLIT_SERVER_ADDRESS", "0.0.0.0")
+      }
+      env {
+        name  = "STREAMLIT_BROWSER_GATHERUSAGESTATS"
+        value = lookup(var.app_env, "STREAMLIT_BROWSER_GATHERUSAGESTATS", "false")
+      }
+      env {
+        name  = "STREAMLIT_SERVER_FILEWATCHER_TYPE"
+        value = lookup(var.app_env, "STREAMLIT_SERVER_FILEWATCHER_TYPE", "none")
+      }
+
+      env {
+        name  = "ORT_LOG_SEVERITY_LEVEL"
+        value = lookup(var.app_env, "ORT_LOG_SEVERITY_LEVEL", "3")
+      }
+
+      env {
+        name  = "FAL_TIMEOUT"
+        value = lookup(var.app_env, "FAL_TIMEOUT", "1800")
+      }
+      env {
+        name  = "FAL_REQ_TIMEOUT"
+        value = lookup(var.app_env, "FAL_REQ_TIMEOUT", "45")
+      }
+      env {
+        name  = "FAL_POLL_EVERY"
+        value = lookup(var.app_env, "FAL_POLL_EVERY", "2.0")
+      }
+      env {
+        name  = "FAL_RESPONSE_GRACE"
+        value = lookup(var.app_env, "FAL_RESPONSE_GRACE", "60")
+      }
+      env {
+        name  = "FAL_CONC_BACKOFF_S"
+        value = lookup(var.app_env, "FAL_CONC_BACKOFF_S", "5")
+      }
+      env {
+        name  = "FAL_CONC_BACKOFF_MAX"
+        value = lookup(var.app_env, "FAL_CONC_BACKOFF_MAX", "60")
+      }
+      env {
+        name  = "FAL_MAX_SUBMIT_RETRIES"
+        value = lookup(var.app_env, "FAL_MAX_SUBMIT_RETRIES", "40")
+      }
+
+      env {
+        name  = "FAL_INF_ENDPOINT"
+        value = lookup(var.app_env, "FAL_INF_ENDPOINT", "fal-ai/infinitalk/single-text")
+      }
+      env {
+        name  = "FAL_QUEUE_BASE"
+        value = lookup(var.app_env, "FAL_QUEUE_BASE", "https://queue.fal.run")
+      }
+      env {
+        name  = "FAL_VEO3_ENDPOINT"
+        value = lookup(var.app_env, "FAL_VEO3_ENDPOINT", "fal-ai/veo3")
+      }
+
+      env {
+        name  = "SADTALKER_POSE_SCALE"
+        value = lookup(var.app_env, "SADTALKER_POSE_SCALE", "1.2")
+      }
+      env {
+        name  = "SADTALKER_EXPRESSION_SCALE"
+        value = lookup(var.app_env, "SADTALKER_EXPRESSION_SCALE", "1.3")
+      }
+      env {
+        name  = "SADTALKER_STILL_MODE"
+        value = lookup(var.app_env, "SADTALKER_STILL_MODE", "false")
+      }
+      env {
+        name  = "SADTALKER_PREPROCESS"
+        value = lookup(var.app_env, "SADTALKER_PREPROCESS", "full")
+      }
+      env {
+        name  = "SADTALKER_ENHANCER"
+        value = lookup(var.app_env, "SADTALKER_ENHANCER", "gfpgan")
+      }
+      env {
+        name  = "SADTALKER_TIMEOUT"
+        value = lookup(var.app_env, "SADTALKER_TIMEOUT", "300")
+      }
+
+      env {
+        name  = "PIPER_BIN"
+        value = lookup(var.app_env, "PIPER_BIN", "/usr/local/bin/piper")
+      }
+      env {
+        name  = "PIPER_VOICE"
+        value = lookup(var.app_env, "PIPER_VOICE", "/opt/piper/voices/en_US-amy-medium.onnx")
+      }
+      env {
+        name  = "WAV2LIP_CHECKPOINT"
+        value = lookup(var.app_env, "WAV2LIP_CHECKPOINT", "/models/wav2lip/wav2lip_gan.pth")
+      }
+
+      # Secrets -> env
+      env {
+        name        = "FAL_API_KEY"
+        secret_name = "fal-api-key"
+      }
+      env {
+        name        = "D_ID_API_KEY"
+        secret_name = "did-api-key"
+      }
+      dynamic "env" {
+        for_each = try(var.sadtalker_base, null) != null && var.sadtalker_base != "" ? [1] : []
+        content {
+          name        = "SADTALKER_BASE"
+          secret_name = "sadtalker-base"
         }
-        volume {
-          name = "models"
-          azure_file {
-            secret_name = kubernetes_secret.azurefile.metadata[0].name
-            share_name  = azurerm_storage_share.models.name
-            read_only   = false
-          }
-        }
-        volume {
-          name = "voices"
-          azure_file {
-            secret_name = kubernetes_secret.azurefile.metadata[0].name
-            share_name  = azurerm_storage_share.voices.name
-            read_only   = false
-          }
+      }
+
+      # Mounts (use `path` for ACA)
+      dynamic "volume_mounts" {
+        for_each = var.use_azure_files ? toset(["models", "voices", "outputs"]) : []
+        content {
+          name = volume_mounts.value
+          path = lookup({
+            models  = "/models",
+            voices  = "/opt/piper/voices",
+            outputs = "/app/outputs"
+          }, volume_mounts.value, "/mnt/${volume_mounts.value}")
         }
       }
     }
-  }
-}
 
-# ---------------- Service (ClusterIP for internal access) ----------------
-resource "kubernetes_service" "svc" {
-  metadata {
-    name      = "vllm-svc"
-    namespace = kubernetes_namespace.ns.metadata[0].name
-    labels    = { app = "vllm" }
-  }
-  depends_on = [kubernetes_namespace.ns]
-
-  spec {
-    selector = { app = "vllm" }
-    type     = "ClusterIP"
-    port {
-      name        = "http"
-      port        = 80
-      target_port = var.container_port
-      protocol    = "TCP"
+    # Volumes bound to environment storages
+    dynamic "volume" {
+      for_each = var.use_azure_files ? {
+        models  = azurerm_container_app_environment_storage.models[0].name
+        voices  = azurerm_container_app_environment_storage.voices[0].name
+        outputs = azurerm_container_app_environment_storage.outputs[0].name
+      } : {}
+      content {
+        name         = volume.key
+        storage_type = "AzureFile"
+        storage_name = volume.value
+      }
     }
   }
+
+  depends_on = [time_sleep.after_build]
 }
 
-# ---------------- Outputs ----------------
-output "acr_login_server" {
-  value       = azurerm_container_registry.acr.login_server
-  description = "ACR login server for pushing images"
-}
-
-output "storage_account" {
-  value       = azurerm_storage_account.sa.name
-  description = "Storage account name for Azure Files"
-}
-
-output "aks_cluster_name" {
-  value       = azurerm_kubernetes_cluster.aks.name
-  description = "AKS cluster name for kubectl configuration"
-}
-
-output "test_instructions" {
-  value       = <<EOT
-To test the deployment:
-1. Configure kubectl:
-   az aks get-credentials -n ${azurerm_kubernetes_cluster.aks.name} -g ${azurerm_resource_group.rg.name} --overwrite-existing
-2. Port-forward to the service:
-   kubectl -n ${local.ns} port-forward svc/vllm-svc ${var.container_port}:${var.container_port}
-3. Open in browser: http://localhost:${var.container_port}
-EOT
-  description = "Instructions to test the internal service"
+########################################
+# Outputs
+########################################
+output "app_url" {
+  value       = "https://${azurerm_container_app.app.latest_revision_fqdn}"
+  description = "Public URL for the Container App."
 }

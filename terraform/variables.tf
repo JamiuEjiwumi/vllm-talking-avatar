@@ -1,19 +1,15 @@
 variable "project" {
   type        = string
+  description = "Short project name (used to name resources)."
   default     = "vllm"
-  description = "Project name prefix (must be short to fit storage account naming limits)"
-  validation {
-    condition     = length(var.project) <= 20
-    error_message = "Project name must be 20 characters or less to fit within storage account naming constraints."
-  }
 }
 
 variable "location" {
-  type    = string
-  default = "westeurope"
+  type        = string
+  description = "Azure region."
+  default     = "westeurope"
 }
 
-# Image repo name (no registry) e.g., "vllm"
 variable "image_name" {
   type    = string
   default = "vllm"
@@ -24,51 +20,80 @@ variable "image_tag" {
   default = "latest"
 }
 
-# Container port (e.g., Streamlit)
-variable "container_port" {
-  type    = number
-  default = 8501
+variable "app_port" {
+  description = "Container port the app listens on."
+  type        = number
+  default     = 8080
 }
 
-# Container resources
-variable "cpu" {
-  type    = number
-  default = 4
+variable "use_azure_files" {
+  description = "Whether to mount Azure Files for models/voices/outputs."
+  type        = bool
+  default     = true
 }
 
-variable "memory_gb" {
-  type    = number
-  default = 16
-}
-
-variable "gpu_count" {
-  type    = number
-  default = 1
-}
-
-# Use spot instances for GPU node pool (cost savings for testing)
-# variable "use_spot_instances" {
-#   type    = bool
-#   default = false
-# }
-
-# Environment variables expected by the app
-variable "env_vars" {
-  type = map(string)
+variable "app_env" {
+  description = "Non-secret environment variables for the container."
+  type        = map(string)
   default = {
-    PIPER_BIN               = "/usr/local/bin/piper"
-    PIPER_VOICE             = "/mnt/voices/en_US-amy-medium.onnx"
-    WAV2LIP_CHECKPOINT      = "/mnt/models/wav2lip/wav2lip_gan.pth"
-    INFINITETALK_CHECKPOINT = "/mnt/models/infinitetalk"
+    STREAMLIT_SERVER_HEADLESS          = "true"
+    STREAMLIT_SERVER_ADDRESS           = "0.0.0.0"
+    STREAMLIT_BROWSER_GATHERUSAGESTATS = "false"
+    STREAMLIT_SERVER_FILEWATCHER_TYPE  = "none"
+
+    ORT_LOG_SEVERITY_LEVEL = "3"
+
+    FAL_TIMEOUT            = "1800"
+    FAL_REQ_TIMEOUT        = "45"
+    FAL_POLL_EVERY         = "2.0"
+    FAL_RESPONSE_GRACE     = "60"
+    FAL_CONC_BACKOFF_S     = "5"
+    FAL_CONC_BACKOFF_MAX   = "60"
+    FAL_MAX_SUBMIT_RETRIES = "40"
+
+    FAL_INF_ENDPOINT  = "fal-ai/infinitalk/single-text"
+    FAL_QUEUE_BASE    = "https://queue.fal.run"
+    FAL_VEO3_ENDPOINT = "fal-ai/veo3"
+
+    SADTALKER_POSE_SCALE       = "1.2"
+    SADTALKER_EXPRESSION_SCALE = "1.3"
+    SADTALKER_STILL_MODE       = "false"
+    SADTALKER_PREPROCESS       = "full"
+    SADTALKER_ENHANCER         = "gfpgan"
+    SADTALKER_TIMEOUT          = "300"
+
+    PIPER_BIN          = "/usr/local/bin/piper"
+    PIPER_VOICE        = "/opt/piper/voices/en_US-amy-medium.onnx"
+    WAV2LIP_CHECKPOINT = "/models/wav2lip/wav2lip_gan.pth"
   }
 }
 
-variable "dockerfile_path" {
-  type      = string
-  sensitive = true
+variable "fal_api_key" {
+  description = "FAL API key."
+  type        = string
+  sensitive   = true
+}
+
+variable "d_id_api_key" {
+  description = "D-ID API key (email:token)."
+  type        = string
+  sensitive   = true
+}
+
+variable "sadtalker_base" {
+  description = "Your Hugging Face SadTalker Space URL (optional)."
+  type        = string
+  default     = ""
 }
 
 variable "app_src_path" {
-  description = "Path to Docker build context for the API"
+  description = "Path to Docker build context."
   type        = string
+  default     = "./"
+}
+
+variable "dockerfile_path" {
+  description = "Path to Dockerfile relative to repo root."
+  type        = string
+  default     = "Dockerfile"
 }
