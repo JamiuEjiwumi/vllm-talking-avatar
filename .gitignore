@@ -31,3 +31,31 @@ Thumbs.db
 # Environment
 .env
 *.env
+
+# Python / build
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env & secrets
+.env
+.env.*
+
+# Streamlit / temp
+.streamlit/
+tmp/
+tmp_*/
+*.log
+
+# Generated media & models
+outputs/
+*.mp4
+*.wav
+models/
+voices/
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/

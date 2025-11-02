@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   vllm-app:
     build: .
@@ -5,33 +7,36 @@ services:
     working_dir: /app
     ports:
       - "8501:8501"
+
+    # Keep secrets out of the file; use a local .env
+    env_file:
+      - .env
+
     environment:
-      # Core app config
+      # Core app config (non-secrets)
       PIPER_BIN: /usr/local/bin/piper
       PIPER_VOICE: /opt/piper/voices/en_US-amy-medium.onnx
       WAV2LIP_CHECKPOINT: /models/wav2lip/wav2lip_gan.pth
       ORT_LOG_SEVERITY_LEVEL: "3"
-      FAL_API_KEY: "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3214e2"
-      FAL_VOICE: "Bill"
-      FAL_INF_ENDPOINT: "fal-ai/infinitalk/single-text"
-      FAL_QUEUE_BASE: "https://queue.fal.run"
-      D_ID_API_KEY: "ZWppdHVuZGUzQGdtYWlsLmNvbQ:Kg_E2A2C8K7tpZZaq9MDt"
-      DID_TEXT: "Hello, this is a test message."
-      DID_VOICE_PROVIDER: "microsoft"
-      DID_VOICE: "en-US-GuyNeural"
-      # --- SadTalker tuning ---
-      SADTALKER_POSE_SCALE: "1.2"          # 1.0–1.6 typical
-      SADTALKER_EXPRESSION_SCALE: "1.3"    # 1.0–1.8 typical
+
+      # Streamlit quality-of-life
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
+      STREAMLIT_BROWSER_GATHERUSAGESTATS: "false"
+      STREAMLIT_SERVER_FILEWATCHER_TYPE: "none"
+      # Optional: increase upload size if needed (MB)
+      # STREAMLIT_SERVER_MAX_UPLOAD_SIZE: "200"
+
+      # You can keep non-sensitive defaults here; secrets come from .env:
+      # SADTALKER_BASE likely fine to keep public
+      SADTALKER_POSE_SCALE: "1.2"
+      SADTALKER_EXPRESSION_SCALE: "1.3"
       SADTALKER_STILL_MODE: "false"
-      SADTALKER_PREPROCESS: "full"         # or "crop"
+      SADTALKER_PREPROCESS: "full"
       SADTALKER_ENHANCER: "gfpgan"
       SADTALKER_TIMEOUT: "300"
-      SADTALKER_BASE: "https://jamiu001-sadtalker.hf.space"
-      FAL_VEO3_ENDPOINT: "fal-ai/veo3"
-      FAL_VEO3_AR: "16:9"
-      FAL_VEO3_DURATION: "8s"
-      FAL_VEO3_RES: "720p"
-      FAL_VEO3_AUDIO: "true" 
+
+      # FAL queue/polling knobs (these are not secrets)
       FAL_TIMEOUT: "1800"
       FAL_REQ_TIMEOUT: "45"
       FAL_POLL_EVERY: "2.0"
@@ -45,4 +50,25 @@ services:
       - ./models:/models
       - ./voices:/opt/piper/voices
       - ./outputs:/app/outputs
+
+    # Faster /tmp and cleans on container restart
+    tmpfs:
+      - /tmp:exec,mode=1777
+
+    # App readiness probe (Streamlit exposes /_stcore/health)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8501/_stcore/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    # Cap container logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # Auto-restart on failure
     restart: unless-stopped
