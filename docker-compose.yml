@@ -44,6 +44,10 @@ services:
       FAL_CONC_BACKOFF_S: "5"
       FAL_CONC_BACKOFF_MAX: "60"
       FAL_MAX_SUBMIT_RETRIES: "40"
+      RUNPOD_API_KEY: "rpa_LJ27J375BAGQKLQ3TX20PWGTL5J7HNRX75HG065K1arlcf"
+      RUNPOD_ENDPOINT_ID: "InfiniteTalk"
+      RUNPOD_IMAGE_URL: "https://image.runpod.ai/assets/meigen-ai/poddy.jpg"
+      RUNPOD_AUDIO_URL: "https://image.runpod.ai/assets/meigen-ai/audio.wav"
 
     volumes:
       - ./app:/app/app

@@ -77,3 +77,6 @@ You’ll see the Speech VLLM – Realistic Talking Avatar interface:
 
 The system will:
 - Render the final video.
+
+
+runpod key: rpa_LJ27J375BAGQKLQ3TX20PWGTL5J7HNRX75HG065K1arlcf
