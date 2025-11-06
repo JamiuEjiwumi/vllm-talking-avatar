@@ -62,6 +62,60 @@ resource "time_sleep" "after_build" {
   depends_on      = [null_resource.acr_build]
 }
 
+resource "azurerm_container_app_environment" "env" {
+  name                       = "${var.project}-cae"
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.law.id
+
+  # CPU/general profile (optional but nice to be explicit)
+  workload_profile {
+    name                   = "cpu-general"
+    workload_profile_type  = "Consumption"
+    minimum_count          = 0
+    maximum_count          = 100
+  }
+
+  # GPU profile (names/skus vary by region—use what your sub supports)
+  workload_profile {
+    name                   = "gpu-profile"
+    workload_profile_type  = "Gpu"
+    minimum_count          = 0
+    maximum_count          = 10
+    # some provider versions support: sku = "NVIDIA_T4" or "NVIDIA_L4"
+  }
+}
+
+
+
+# ---- build infinitetalk (GPU) image in ACR ----
+resource "null_resource" "acr_build_infinitetalk" {
+  triggers = {
+    image_tag        = var.image_tag
+    acr_login        = azurerm_container_registry.acr.login_server
+    dockerfile_hash  = filesha1("${path.module}/../services/infinitetalk/Dockerfile")
+    app_src          = "${path.module}/../services/infinitetalk"
+  }
+
+  provisioner "local-exec" {
+    working_dir = "${path.module}/../services/infinitetalk"
+    command     = <<EOT
+      az acr login -n ${azurerm_container_registry.acr.name} || exit 1
+      az acr build -r ${azurerm_container_registry.acr.name} \
+        -t infinitetalk:${var.image_tag} . || exit 1
+    EOT
+    interpreter = ["/bin/bash", "-c"]
+  }
+
+  depends_on = [azurerm_container_registry.acr]
+}
+
+resource "time_sleep" "after_build_infinitetalk" {
+  create_duration = "30s"
+  depends_on      = [null_resource.acr_build_infinitetalk]
+}
+
+
 ########################################
 # Storage (Azure Files)
 ########################################
@@ -168,6 +222,11 @@ resource "azurerm_container_app" "app" {
   }
 
   secret {
+    name  = "infinitetalk-api-key"
+    value = var.infinitetalk_api_key   # add this var, e.g. in tfvars
+  }
+
+  secret {
     name  = "fal-api-key"
     value = var.fal_api_key
   }
@@ -219,6 +278,14 @@ resource "azurerm_container_app" "app" {
       env {
         name  = "STREAMLIT_SERVER_ADDRESS"
         value = lookup(var.app_env, "STREAMLIT_SERVER_ADDRESS", "0.0.0.0")
+      }
+      env {
+        name  = "INFINITALK_URL"
+        value = "http://infinitetalk:8000"
+      }
+      env {
+        name        = "INFINITALK_API_KEY"
+        secret_name = "infinitetalk-api-key"
       }
       env {
         name  = "STREAMLIT_BROWSER_GATHERUSAGESTATS"
@@ -360,7 +427,10 @@ resource "azurerm_container_app" "app" {
     }
   }
 
-  depends_on = [time_sleep.after_build]
+  depends_on = [
+    time_sleep.after_build,
+    time_sleep.after_build_infinitetalk
+  ]
 }
 
 ########################################

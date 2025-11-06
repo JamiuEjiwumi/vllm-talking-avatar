@@ -59,3 +59,18 @@ voices/
 .DS_Store
 .vscode/
 .idea/
+
+# Python
+__pycache__/
+*.pyc
+.DS_Store
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate*
+terraform/*.tfvars
+terraform/*.backup
+
+# Environment / Docker
+.env
+outputs/

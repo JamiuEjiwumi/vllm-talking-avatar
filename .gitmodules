@@ -1,0 +1,3 @@
+[submodule "services/infinitetalk/upstream"]
+	path = services/infinitetalk/upstream
+	url = https://github.com/MeiGen-AI/InfiniteTalk

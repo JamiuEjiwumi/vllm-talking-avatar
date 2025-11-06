@@ -140,6 +140,18 @@ if st.button("Speak", type="primary"):
                     out_mp4_path=out_path,
                 )
 
+            elif video_choice == "infinitetalk_local":
+                audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
+                os.close(audio_fd)
+                tts.synthesize(text, audio_path)
+                result_path = video.generate(
+                    face_image_path=face_path,
+                    audio_wav_path=audio_path,
+                    out_mp4_path=out_path,
+                    fps=fps,
+                    size=size,
+                )
+
             else:
                 # wav2lip (and any other providers that expect pre-made audio)
                 audio_fd, audio_path = tempfile.mkstemp(suffix=".wav", dir="/tmp")

@@ -4,6 +4,7 @@ from .fal_infinitalk_provider import FalInfinitalkProvider
 from .fal_veo3_provider import FalVeo3Provider
 from .sadtalker_provider import SadTalkerProvider
 from .did_provider import DIDProvider
+from .infinitetalk_provider import InfiniteTalkLocalProvider
 
 
 VIDEO_PROVIDERS = {
@@ -11,5 +12,6 @@ VIDEO_PROVIDERS = {
     "fal_infinitalk": FalInfinitalkProvider,
     "fal_veo3": FalVeo3Provider,
     "sadtalker": SadTalkerProvider,
-    "did": DIDProvider
+    "did": DIDProvider,
+    "infinitetalk_local": InfiniteTalkLocalProvider
 }

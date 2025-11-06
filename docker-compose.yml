@@ -18,25 +18,16 @@ services:
       PIPER_VOICE: /opt/piper/voices/en_US-amy-medium.onnx
       WAV2LIP_CHECKPOINT: /models/wav2lip/wav2lip_gan.pth
       ORT_LOG_SEVERITY_LEVEL: "3"
-
-      # Streamlit quality-of-life
       STREAMLIT_SERVER_HEADLESS: "true"
       STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
       STREAMLIT_BROWSER_GATHERUSAGESTATS: "false"
       STREAMLIT_SERVER_FILEWATCHER_TYPE: "none"
-      # Optional: increase upload size if needed (MB)
-      # STREAMLIT_SERVER_MAX_UPLOAD_SIZE: "200"
-
-      # You can keep non-sensitive defaults here; secrets come from .env:
-      # SADTALKER_BASE likely fine to keep public
       SADTALKER_POSE_SCALE: "1.2"
       SADTALKER_EXPRESSION_SCALE: "1.3"
       SADTALKER_STILL_MODE: "false"
       SADTALKER_PREPROCESS: "full"
       SADTALKER_ENHANCER: "gfpgan"
       SADTALKER_TIMEOUT: "300"
-
-      # FAL queue/polling knobs (these are not secrets)
       FAL_TIMEOUT: "1800"
       FAL_REQ_TIMEOUT: "45"
       FAL_POLL_EVERY: "2.0"
@@ -44,6 +35,8 @@ services:
       FAL_CONC_BACKOFF_S: "5"
       FAL_CONC_BACKOFF_MAX: "60"
       FAL_MAX_SUBMIT_RETRIES: "40"
+      INFINITALK_URL: http://infinitetalk:8000
+      INFINITALK_API_KEY: dev-key
 
     volumes:
       - ./app:/app/app
@@ -71,4 +64,17 @@ services:
         max-file: "3"
 
     # Auto-restart on failure
+    restart: unless-stopped
+    depends_on:
+      - infinitetalk
+
+
+  infinitetalk:
+    build:
+      context: ./services/infinitetalk
+    environment:
+      - INFINITALK_API_KEY=dev-key
+    ports:
+      - "8000:8000"
+    gpus: all
     restart: unless-stopped

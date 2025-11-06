@@ -97,3 +97,8 @@ variable "dockerfile_path" {
   type        = string
   default     = "Dockerfile"
 }
+
+variable "infinitetalk_api_key" {
+  description = "Shared secret for Streamlit -> InfiniteTalk sidecar."
+  sensitive   = true
+}

@@ -13,6 +13,7 @@ fal_api_key  = "19fff532-18a9-471b-b754-0b3f93855652:1a58841a03aa4c77486ed9acbe3
 d_id_api_key = "ZWppdHVuZGUzQGdtYWlsLmNvbQ:Kg_E2A2C8K7tpZZaq9MDt"
 
 sadtalker_base = "https://jamiu001-sadtalker.hf.space"
+infinitetalk_api_key = "dev-key"
 
 app_env = {
   PIPER_BIN          = "/usr/local/bin/piper"

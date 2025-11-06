@@ -10,7 +10,6 @@ git clone https://github.com/JamiuEjiwumi/vllm-talking-avatar.git
 cd vllm-talking-avatar
 
 
-
 3. 🚀 Local Run (Docker Compose)
 1️⃣ Create a .env file
 FAL_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
