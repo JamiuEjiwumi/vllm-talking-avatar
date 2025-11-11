@@ -16,7 +16,7 @@ class InfiniteTalkProvider(VideoProvider):
         self.key = os.getenv("INFINITALK_API_KEY")
         if not self.key:
             raise RuntimeError("INFINITALK_API_KEY is required.")
-        self.base = os.getenv("INFINITALK_BASE", "https://api.infinitetalk.net").rstrip("/")
+        self.base = os.getenv("INFINITALK_URL", "https://api.runpod.ai/v2/5n0y8zzxq9f9sa/run").rstrip("/")
         self.timeout_s = timeout_s
         self.headers = {"Authorization": f"Bearer {self.key}"}
 
